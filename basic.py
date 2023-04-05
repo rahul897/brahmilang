@@ -423,6 +423,13 @@ class VarAssignNode:
         self.pos_start = self.var_name_tok.pos_start
         self.pos_end = self.value_node.pos_end
 
+class VarNextAssignNode:
+    def __init__(self, var_name_tok, value_node):
+        self.var_name_tok = var_name_tok
+        self.value_node = value_node
+
+        self.pos_start = self.var_name_tok.pos_start
+        self.pos_end = self.value_node.pos_end
 
 class BinOpNode:
     def __init__(self, left_node, op_tok, right_node):
@@ -675,10 +682,10 @@ class Parser:
             self.advance()
             return res.success(BreakNode(pos_start, self.current_tok.pos_start.copy()))
 
-        if self.current_tok.type == TT_IDENTIFIER and \
-                global_symbol_table.get(self.current_tok.value) != None:
+        if self.current_tok.type == TT_IDENTIFIER:
             id_res = self.assignNodeResult()
-            if id_res: return id_res
+            if id_res:
+                return id_res
 
         expr = res.register(self.expr())
         if res.error:
@@ -1313,7 +1320,7 @@ class Parser:
         self.advance()
         expr = res.register(self.expr())
         if res.error: return res
-        return res.success(VarAssignNode(var_name, expr))
+        return res.success(VarNextAssignNode(var_name, expr))
 
 
 #######################################
@@ -2042,6 +2049,23 @@ class Interpreter:
             ))
 
         value = value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
+        return res.success(value)
+
+    def visit_VarNextAssignNode(self, node, context):
+        res = RTResult()
+        var_name = node.var_name_tok.value
+
+        value = context.symbol_table.get(var_name)
+        if not value:
+            return res.failure(RTError(
+                node.pos_start, node.pos_end,
+                f"mundu bokka_ji cheppi '{var_name}' vaduko ra babu ",
+                context
+            ))
+        value = res.register(self.visit(node.value_node, context))
+        if res.should_return(): return res
+
+        context.symbol_table.set(var_name, value)
         return res.success(value)
 
     def visit_VarAssignNode(self, node, context):
