@@ -37,7 +37,7 @@ class Error:
 
 class IllegalCharError(Error):
     def __init__(self, pos_start, pos_end, details):
-        super().__init__(pos_start, pos_end, 'Illegal Character', details)
+        super().__init__(pos_start, pos_end, 'EM TYPE CHESAV RA BABU', details)
 
 
 class ExpectedCharError(Error):
@@ -47,12 +47,12 @@ class ExpectedCharError(Error):
 
 class InvalidSyntaxError(Error):
     def __init__(self, pos_start, pos_end, details=''):
-        super().__init__(pos_start, pos_end, 'Invalid Syntax', details)
+        super().__init__(pos_start, pos_end, 'SYNTAX CHOOSKO BABU', details)
 
 
 class RTError(Error):
     def __init__(self, pos_start, pos_end, details, context):
-        super().__init__(pos_start, pos_end, 'Runtime Error', details)
+        super().__init__(pos_start, pos_end, 'LOGIC CHOOSKO BABU', details)
         self.context = context
 
     def as_string(self):
@@ -71,7 +71,7 @@ class RTError(Error):
             pos = ctx.parent_entry_pos
             ctx = ctx.parent
 
-        return 'Traceback (most recent call last):\n' + result
+        return 'ekkada dobbindante:\n' + result
 
 
 #######################################
@@ -600,7 +600,7 @@ class Parser:
             if self.current_tok.type != TT_EOF:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "edaina mundu bokka_hi ki cheppali"
+                    "mundu excuse_me evadu cheptadu"
                 ))
             res.register_advancement()
             self.advance()
@@ -608,7 +608,7 @@ class Parser:
         if not res.error and self.current_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "velipotha anna tarvata malli inkem matladaku"
+                f"manalo mana mata '{self.current_tok}' ki mundu '{self.tokens[self.tok_idx-1]}' ravacha"
             ))
         return res
 
@@ -675,11 +675,16 @@ class Parser:
             self.advance()
             return res.success(BreakNode(pos_start, self.current_tok.pos_start.copy()))
 
+        if self.current_tok.type == TT_IDENTIFIER and \
+                global_symbol_table.get(self.current_tok.value) != None:
+            id_res = self.assignNodeResult()
+            if id_res: return id_res
+
         expr = res.register(self.expr())
         if res.error:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Expected 'RETURN', 'nannu_involve_cheyakandi', 'aapandroi', 'bokka_ji', 'idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', 'FUN', int, float, identifier, '+', '-', '(', '[' or 'NOT'"
+                "Expected 'nannu_involve_cheyakandi', 'aapandroi', 'bokka_ji', 'idi_ok_antaventra', 'nuv_line_lo_undu', '+', '-', '(', '[' or 'NOT'"
             ))
         return res.success(expr)
 
@@ -693,7 +698,7 @@ class Parser:
             if self.current_tok.type != TT_IDENTIFIER:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected identifier"
+                    "cheppara bokka ki variable name kakunda anni cheppu"
                 ))
 
             var_name = self.current_tok
@@ -703,7 +708,7 @@ class Parser:
             if self.current_tok.type != TT_EQ:
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected '='"
+                    "'=' evadu pedtadu"
                 ))
 
             res.register_advancement()
@@ -717,7 +722,7 @@ class Parser:
         if res.error:
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                "Expected 'bokka_ji', 'idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', 'FUN', int, float, identifier, '+', '-', '(', '[' or 'NOT'"
+                "Expected 'bokka_ji', 'idi_ok_antaventra', 'nuv_line_lo_undu', '+', '-', '(', '[' or 'NOT'"
             ))
 
         return res.success(node)
@@ -784,7 +789,7 @@ class Parser:
                 if res.error:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        "Expected ')', 'bokka_ji', 'idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', 'FUN', int, float, identifier, '+', '-', '(', '[' or 'NOT'"
+                        "Expected ')', 'bokka_ji', 'idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', '+', '-', '(', '[' or 'NOT'"
                     ))
 
                 while self.current_tok.type == TT_COMMA:
@@ -866,54 +871,7 @@ class Parser:
 
         return res.failure(InvalidSyntaxError(
             tok.pos_start, tok.pos_end,
-            "Expected int, float, identifier, '+', '-', '(', '[', idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', 'FUN'"
-        ))
-
-    def list_expr(self):
-        res = ParseResult()
-        element_nodes = []
-        pos_start = self.current_tok.pos_start.copy()
-
-        if self.current_tok.type != TT_LSQUARE:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected '['"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_RSQUARE:
-            res.register_advancement()
-            self.advance()
-        else:
-            element_nodes.append(res.register(self.expr()))
-            if res.error:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    "Expected ']', 'bokka_ji', 'idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', 'FUN', int, float, identifier, '+', '-', '(', '[' or 'NOT'"
-                ))
-
-            while self.current_tok.type == TT_COMMA:
-                res.register_advancement()
-                self.advance()
-
-                element_nodes.append(res.register(self.expr()))
-                if res.error: return res
-
-            if self.current_tok.type != TT_RSQUARE:
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Expected ',' or ']'"
-                ))
-
-            res.register_advancement()
-            self.advance()
-
-        return res.success(ListNode(
-            element_nodes,
-            pos_start,
-            self.current_tok.pos_end.copy()
+            "Expected int, float, identifier, '+', '-', '(', '[', idi_ok_antaventra', 'nuv_line_lo_undu'"
         ))
 
     def if_expr(self):
@@ -948,7 +906,7 @@ class Parser:
                 else:
                     return res.failure(InvalidSyntaxError(
                         self.current_tok.pos_start, self.current_tok.pos_end,
-                        "Expected 'idi_code_a_vellehe'"
+                        "'idi_code_a_vellehe' rayadaniki kuda baddakamena"
                     ))
             else:
                 expr = res.register(self.statement())
@@ -1025,93 +983,6 @@ class Parser:
 
         return res.success((cases, else_case))
 
-    def for_expr(self):
-        res = ParseResult()
-
-        if not self.current_tok.matches(TT_KEYWORD, 'FOR'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected 'FOR'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type != TT_IDENTIFIER:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected identifier"
-            ))
-
-        var_name = self.current_tok
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type != TT_EQ:
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected '='"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        start_value = res.register(self.expr())
-        if res.error: return res
-
-        if not self.current_tok.matches(TT_KEYWORD, 'TO'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected 'TO'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        end_value = res.register(self.expr())
-        if res.error: return res
-
-        if self.current_tok.matches(TT_KEYWORD, 'STEP'):
-            res.register_advancement()
-            self.advance()
-
-            step_value = res.register(self.expr())
-            if res.error: return res
-        else:
-            step_value = None
-
-        if not self.current_tok.matches(TT_KEYWORD, ':'):
-            return res.failure(InvalidSyntaxError(
-                self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected ':'"
-            ))
-
-        res.register_advancement()
-        self.advance()
-
-        if self.current_tok.type == TT_NEWLINE:
-            res.register_advancement()
-            self.advance()
-
-            body = res.register(self.statements())
-            if res.error: return res
-
-            if not self.current_tok.matches(TT_KEYWORD, 'idi_code_a_vellehe'):
-                return res.failure(InvalidSyntaxError(
-                    self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Expected 'idi_code_a_vellehe'"
-                ))
-
-            res.register_advancement()
-            self.advance()
-
-            return res.success(ForNode(var_name, start_value, end_value, step_value, body, True))
-
-        body = res.register(self.statement())
-        if res.error: return res
-
-        return res.success(ForNode(var_name, start_value, end_value, step_value, body, False))
-
     def while_expr(self):
         res = ParseResult()
 
@@ -1130,7 +1001,7 @@ class Parser:
         if not self.current_tok.matches(TT_KEYWORD, ':'):
             return res.failure(InvalidSyntaxError(
                 self.current_tok.pos_start, self.current_tok.pos_end,
-                f"Expected ':'"
+                f"':' evadu pedtadu"
             ))
 
         res.register_advancement()
@@ -1146,7 +1017,7 @@ class Parser:
             if not self.current_tok.matches(TT_KEYWORD, 'idi_code_a_vellehe'):
                 return res.failure(InvalidSyntaxError(
                     self.current_tok.pos_start, self.current_tok.pos_end,
-                    f"Expected 'idi_code_a_vellehe'"
+                    "'idi_code_a_vellehe' rayadaniki kuda baddakamena"
                 ))
 
             res.register_advancement()
@@ -1287,6 +1158,27 @@ class Parser:
             left = BinOpNode(left, op_tok, right)
 
         return res.success(left)
+
+    def assignNodeResult(self):
+        res = ParseResult()
+        if self.current_tok.type != TT_IDENTIFIER:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                "Expected identifier"
+            ))
+
+        var_name = self.current_tok
+        if self.tok_idx+1>=len(self.tokens) or (self.tok_idx+1<len(self.tokens) and self.tokens[self.tok_idx+1].type != TT_EQ):
+            return None
+
+        res.register_advancement()
+        self.advance()
+        #advance '=' token
+        res.register_advancement()
+        self.advance()
+        expr = res.register(self.expr())
+        if res.error: return res
+        return res.success(VarAssignNode(var_name, expr))
 
 
 #######################################
@@ -1452,7 +1344,7 @@ class Number(Value):
             if other.value == 0:
                 return None, RTError(
                     other.pos_start, other.pos_end,
-                    'Division by zero',
+                    'buddhunnodu evadu zero to divde cheyadu',
                     self.context
                 )
 
@@ -1570,65 +1462,6 @@ class String(Value):
 
     def __repr__(self):
         return f'"{self.value}"'
-
-
-class List(Value):
-    def __init__(self, elements):
-        super().__init__()
-        self.elements = elements
-
-    def added_to(self, other):
-        new_list = self.copy()
-        new_list.elements.append(other)
-        return new_list, None
-
-    def subbed_by(self, other):
-        if isinstance(other, Number):
-            new_list = self.copy()
-            try:
-                new_list.elements.pop(other.value)
-                return new_list, None
-            except:
-                return None, RTError(
-                    other.pos_start, other.pos_end,
-                    'Element at this index could not be removed from list because index is out of bounds',
-                    self.context
-                )
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def multed_by(self, other):
-        if isinstance(other, List):
-            new_list = self.copy()
-            new_list.elements.extend(other.elements)
-            return new_list, None
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def dived_by(self, other):
-        if isinstance(other, Number):
-            try:
-                return self.elements[other.value], None
-            except:
-                return None, RTError(
-                    other.pos_start, other.pos_end,
-                    'Element at this index could not be retrieved from list because index is out of bounds',
-                    self.context
-                )
-        else:
-            return None, Value.illegal_operation(self, other)
-
-    def copy(self):
-        copy = List(self.elements)
-        copy.set_pos(self.pos_start, self.pos_end)
-        copy.set_context(self.context)
-        return copy
-
-    def __str__(self):
-        return ", ".join([str(x) for x in self.elements])
-
-    def __repr__(self):
-        return f'[{", ".join([repr(x) for x in self.elements])}]'
 
 
 class BaseFunction(Value):
@@ -2011,7 +1844,7 @@ class Interpreter:
         if not value:
             return res.failure(RTError(
                 node.pos_start, node.pos_end,
-                f"'{var_name}' is not defined",
+                f"mundu bokka_ji cheppi '{var_name}' vaduko ra babu ",
                 context
             ))
 
