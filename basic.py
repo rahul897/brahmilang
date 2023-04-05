@@ -874,6 +874,54 @@ class Parser:
             "Expected int, float, identifier, '+', '-', '(', '[', idi_ok_antaventra', 'nuv_line_lo_undu'"
         ))
 
+    def list_expr(self):
+        res = ParseResult()
+        element_nodes = []
+        pos_start = self.current_tok.pos_start.copy()
+
+        if self.current_tok.type != TT_LSQUARE:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Expected '['"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_RSQUARE:
+            res.register_advancement()
+            self.advance()
+        else:
+            element_nodes.append(res.register(self.expr()))
+            if res.error:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    "Expected ']', 'bokka_ji', 'idi_ok_antaventra', 'FOR', 'nuv_line_lo_undu', 'FUN', int, float, identifier, '+', '-', '(', '[' or 'NOT'"
+                ))
+
+            while self.current_tok.type == TT_COMMA:
+                res.register_advancement()
+                self.advance()
+
+                element_nodes.append(res.register(self.expr()))
+                if res.error: return res
+
+            if self.current_tok.type != TT_RSQUARE:
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Expected ',' or ']'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+
+        return res.success(ListNode(
+            element_nodes,
+            pos_start,
+            self.current_tok.pos_end.copy()
+        ))
+
+
     def if_expr(self):
         res = ParseResult()
         all_cases = res.register(self.if_expr_cases('idi_ok_antaventra'))
@@ -982,6 +1030,93 @@ class Parser:
             cases.extend(new_cases)
 
         return res.success((cases, else_case))
+
+    def for_expr(self):
+        res = ParseResult()
+
+        if not self.current_tok.matches(TT_KEYWORD, 'FOR'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Expected 'FOR'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_IDENTIFIER:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Expected identifier"
+            ))
+
+        var_name = self.current_tok
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type != TT_EQ:
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Expected '='"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        start_value = res.register(self.expr())
+        if res.error: return res
+
+        if not self.current_tok.matches(TT_KEYWORD, 'TO'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Expected 'TO'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        end_value = res.register(self.expr())
+        if res.error: return res
+
+        if self.current_tok.matches(TT_KEYWORD, 'STEP'):
+            res.register_advancement()
+            self.advance()
+
+            step_value = res.register(self.expr())
+            if res.error: return res
+        else:
+            step_value = None
+
+        if not self.current_tok.matches(TT_KEYWORD, 'THEN'):
+            return res.failure(InvalidSyntaxError(
+                self.current_tok.pos_start, self.current_tok.pos_end,
+                f"Expected 'THEN'"
+            ))
+
+        res.register_advancement()
+        self.advance()
+
+        if self.current_tok.type == TT_NEWLINE:
+            res.register_advancement()
+            self.advance()
+
+            body = res.register(self.statements())
+            if res.error: return res
+
+            if not self.current_tok.matches(TT_KEYWORD, 'END'):
+                return res.failure(InvalidSyntaxError(
+                    self.current_tok.pos_start, self.current_tok.pos_end,
+                    f"Expected 'END'"
+                ))
+
+            res.register_advancement()
+            self.advance()
+
+            return res.success(ForNode(var_name, start_value, end_value, step_value, body, True))
+
+        body = res.register(self.statement())
+        if res.error: return res
+
+        return res.success(ForNode(var_name, start_value, end_value, step_value, body, False))
 
     def while_expr(self):
         res = ParseResult()
@@ -1463,6 +1598,64 @@ class String(Value):
     def __repr__(self):
         return f'"{self.value}"'
 
+class List(Value):
+    def __init__(self, elements):
+        super().__init__()
+        self.elements = elements
+
+    def added_to(self, other):
+        new_list = self.copy()
+        new_list.elements.append(other)
+        return new_list, None
+
+    def subbed_by(self, other):
+        if isinstance(other, Number):
+            new_list = self.copy()
+            try:
+                new_list.elements.pop(other.value)
+                return new_list, None
+            except:
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'Element at this index could not be removed from list because index is out of bounds',
+                    self.context
+                )
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def multed_by(self, other):
+        if isinstance(other, List):
+            new_list = self.copy()
+            new_list.elements.extend(other.elements)
+            return new_list, None
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def dived_by(self, other):
+        if isinstance(other, Number):
+            try:
+                return self.elements[other.value], None
+            except:
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'Element at this index could not be retrieved from list because index is out of bounds',
+                    self.context
+                )
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def copy(self):
+        copy = List(self.elements)
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+        return copy
+
+    def __str__(self):
+        return ", ".join([str(x) for x in self.elements])
+
+    def __repr__(self):
+        return f'[{", ".join([repr(x) for x in self.elements])}]'
+
 
 class BaseFunction(Value):
     def __init__(self, name):
@@ -1572,7 +1765,7 @@ class BuiltInFunction(BaseFunction):
     #####################################
 
     def execute_aa_chupentra_idi_chudu(self, exec_ctx):
-        # print(str(exec_ctx.symbol_table.get('value')))
+        print(str(exec_ctx.symbol_table.get('value')))
         return RTResult().success(String(str(exec_ctx.symbol_table.get('value'))))
     execute_aa_chupentra_idi_chudu.arg_names = ['value']
 

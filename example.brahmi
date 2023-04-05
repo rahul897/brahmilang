@@ -1,0 +1,23 @@
+excuse_me
+    bokka_ji a = 10
+    a = a+3
+
+    aa_chupentra_idi_chudu("ipudu a value ochesi:")
+    aa_chupentra_idi_chudu(a)
+    aa_chupentra_idi_chudu("____________")
+    if idi_ok_antaventra a==13:
+        aa_chupentra_idi_chudu(a)
+
+    nuv_line_lo_undu a>0:
+        a = a - 1
+        idi_ok_antaventra a==7:
+            nannu_involve_cheyakandi
+        poni a==5:
+            aapandroi
+        idi_code_a_vellehe
+
+        aa_chupentra_idi_chudu(a*2)
+
+    idi_code_a_vellehe
+
+nenu_vastanu_babu
