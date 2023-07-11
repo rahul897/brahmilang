@@ -167,6 +167,15 @@ class Lexer:
             return Token(TT_FLOAT, float(num_str), pos_start, self.pos)
 
 
+class UnaryNode:
+    def __init__(self, op_tok, node):
+        self.op_tok = op_tok
+        self.node = node
+
+    def __repr__(self):
+        return f'{self.op_tok}, {self.node}'
+
+
 class NumberNode:
     def __init__(self, tok):
         self.tok = tok
@@ -227,9 +236,26 @@ class Parser:
     def factor(self):
         res = ParseResult()
         tok = self.curent_tok
-        if tok.type in (TT_INT, TT_FLOAT):
+        if tok.type in (TT_PLUS, TT_MINUS):
+            res.register(self.advance())
+            factor = res.register(self.factor())
+            if res.error: return res
+            return res.success(UnaryNode(tok,factor))
+        elif tok.type in (TT_INT, TT_FLOAT):
             res.register(self.advance())
             return res.success(NumberNode(tok))
+        elif tok.type == TT_LPAREN:
+            res.register(self.advance())
+            expr = res.register(self.expr())
+            if res.error: return res
+            if self.curent_tok.type == TT_RPAREN:
+                res.register(self.advance())
+                return res.success(expr)
+            else:
+                return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
+                                                      self.curent_tok.pos_end,
+                                                      "Expected ')'"))
+
         return res.failure(InvalidSyntaxError(tok.pos_start, tok.pos_end, "Expected int or float"))
 
     def term(self):
