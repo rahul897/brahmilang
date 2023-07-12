@@ -27,7 +27,8 @@ TT_LTE = 'LTE'
 TT_EOF = 'EOF'
 
 KEYWORDS = [
-    'var', 'and', 'or', 'not', "if", "elif", "else"
+    'var', 'and', 'or', 'not',
+    "if", "elif", "else", "while"
 ]
 
 
@@ -322,6 +323,14 @@ class IfNode:
         self.pos_start = cases[0][0].pos_start
         self.pos_end = else_case.pos_end if else_case else cases[-1][0].pos_end
 
+class WhileNode:
+    def __init__(self, cond, body):
+        self.cond = cond
+        self.body = body
+
+        self.pos_start = cond.pos_start
+        self.pos_end = body.pos_end
+
 
 class VarAccessNode:
     def __init__(self, var_name_tok):
@@ -331,9 +340,10 @@ class VarAccessNode:
 
 
 class VarAssignNode:
-    def __init__(self, var_name_tok, value_node):
+    def __init__(self, var_name_tok, value_node,define):
         self.var_name_tok = var_name_tok
         self.value_node = value_node
+        self.define = define
         self.pos_start = var_name_tok.pos_start
         self.pos_end = value_node.pos_end
 
@@ -412,6 +422,10 @@ class Parser:
             expr = res.register(self.if_expr())
             if res.error: return res
             return res.success(expr)
+        elif tok.matches(TT_KEYWORD, 'while'):
+            expr = res.register(self.while_expr())
+            if res.error: return res
+            return res.success(expr)
 
         return res.failure(InvalidSyntaxError(tok.pos_start, tok.pos_end,
                                               "Expected int, float,identifier,-,+ or ("))
@@ -451,28 +465,42 @@ class Parser:
     def statement(self):
         res = ParseResult()
         tok = self.curent_tok
+        if not (self.curent_tok.matches(TT_KEYWORD, 'var') or self.curent_tok.type==TT_IDENTIFIER):
+            node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'and'), (TT_KEYWORD, 'or'))))
+            if res.error:
+                return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
+                                                      "Expected int,float,var,identifier,-,+ or ("))
+            return res.success(node)
+
+        define = False
         if self.curent_tok.matches(TT_KEYWORD, 'var'):
             res.register_advance()
             self.advance()
-            if self.curent_tok.type != TT_IDENTIFIER:
-                return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected identifier"))
-            var_name = self.curent_tok
-            res.register_advance()
-            self.advance()
-            if self.curent_tok.type != TT_EQ:
-                return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected ="))
-            res.register_advance()
-            self.advance()
-            expr = res.register(self.arith_expr())
-            if res.error: return res
-            return res.success(VarAssignNode(var_name, expr))
-        node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'and'), (TT_KEYWORD, 'or'))))
-        if res.error:
+            define = True
+
+        if self.curent_tok.type != TT_IDENTIFIER:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected int,float,var,identifier,-,+ or ("))
-        return res.success(node)
+                                                  "Expected identifier"))
+        var_name = self.curent_tok
+        res.register_advance()
+        self.advance()
+        if self.curent_tok.type == TT_EOF:
+            return res.success(VarAccessNode(tok))
+        if self.curent_tok.type != TT_EQ:
+            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
+                                                  "Expected ="))
+        res.register_advance()
+        self.advance()
+        expr = res.register(self.arith_expr())
+        if res.error: return res
+        return res.success(VarAssignNode(var_name, expr, define))
+
+
+    def while_expr(self):
+        res = ParseResult()
+        case_pair, error = self.capture_case(res)
+        if error: return res
+        return res.success(WhileNode(case_pair[0],case_pair[1]))
 
     def if_expr(self):
         res = ParseResult()
@@ -712,7 +740,8 @@ class Interpreter:
         value = context.symbol_table.get(var_name)
 
         if value == None:
-            return res.failure(RTError(node.pos_start, node.pos_end, f'{var_name} is not defined'))
+            return res.failure(RTError(node.pos_start, node.pos_end,
+                                       f'{var_name} is not defined', context))
         value = value.copy().set_pos(node.pos_start, node.pos_end)
         return res.success(value)
 
@@ -721,6 +750,14 @@ class Interpreter:
         var_name = node.var_name_tok.value
         value = res.register(self.visit(node.value_node, context))
         if res.error: return res
+        fetch_value = context.symbol_table.get(var_name)
+
+        if fetch_value is not None and node.define:
+            return res.failure(RTError(node.pos_start, node.pos_end,
+                                       f'{var_name} is already defined', context))
+        if fetch_value is None and not node.define:
+            return res.failure(RTError(node.pos_start, node.pos_end,
+                                       f'{var_name} is not defined', context))
         context.symbol_table.set(var_name, value)
 
         return res.success(value)
@@ -740,6 +777,17 @@ class Interpreter:
             if res.error: return res
             return res.success(stat_value)
         return res.success(None)
+
+    def visit_WhileNode(self, node, context):
+        res = RTResult()
+        while True:
+            cond_value = res.register(self.visit(node.cond, context))
+            if res.error: return res
+            if not cond_value.is_true(): break
+            value = res.register(self.visit(node.body,context))
+            if res.error: return res
+
+        return res.success(value)
 
 
 class Context:
