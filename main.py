@@ -131,7 +131,7 @@ class Position:
 
         if current_char == '\n':
             self.ln += 1
-            self.idx = 0
+            self.col = 0
         return self
 
     def copy(self):
@@ -814,6 +814,54 @@ class Parser:
         return statement
 
 
+class RTResult:
+    def __init__(self):
+        self.value = None
+        self.error = None
+        self.loop_should_continue = False
+        self.loop_should_break = False
+        self.reset()
+
+    def reset(self):
+        self.value = None
+        self.error = None
+        self.loop_should_continue = False
+        self.loop_should_break = False
+
+    def register(self, res):
+        self.error = res.error
+        self.loop_should_continue = res.loop_should_continue
+        self.loop_should_break = res.loop_should_break
+        return res.value
+
+    def success(self, value):
+        self.reset()
+        self.value = value
+        return self
+
+    def success_continue(self):
+        self.reset()
+        self.loop_should_continue = True
+        return self
+
+    def success_break(self):
+        self.reset()
+        self.loop_should_break = True
+        return self
+
+    def failure(self, error):
+        self.reset()
+        self.error = error
+        return self
+
+    def should_return(self):
+        return (
+                self.error or
+                self.loop_should_continue or
+                self.loop_should_break
+        )
+
+
 class Value:
     def __init__(self):
         self.set_pos()
@@ -1147,12 +1195,42 @@ class BuiltInFunction(BaseFunction):
 
     execute_clear.arg_names = []
 
+    def execute_run(self, exec_ctx):
+        fn = exec_ctx.symbol_table.get('fn')
+
+        if not isinstance(fn, String):
+            return RTResult().failure(RTError(
+                self.pos_start, self.pos_end,
+                "Argument must be string", exec_ctx
+            ))
+        fn = fn.value
+
+        try:
+            with open(fn, 'r') as f:
+                script = f.read()
+        except Exception as e:
+            return RTResult().failure(RTError(
+                self.pos_start, self.pos_end,
+                f'failed to load script {fn}\n' + str(e), exec_ctx
+            ))
+        _, error = run(fn, script)
+
+        if error:
+            return RTResult().failure(RTError(
+                self.pos_start, self.pos_end,
+                f'failed to finish executing {fn}\n' + error.as_string(), exec_ctx
+            ))
+        return RTResult().success(Number.null)
+
+    execute_run.arg_names = ['fn']
+
 
 BuiltInFunction.print = BuiltInFunction("print")
 BuiltInFunction.print_ret = BuiltInFunction("print_ret")
 BuiltInFunction.input = BuiltInFunction("input")
 BuiltInFunction.input_int = BuiltInFunction("input_int")
 BuiltInFunction.clear = BuiltInFunction("clear")
+BuiltInFunction.run = BuiltInFunction("run")
 
 
 class List(Value):
@@ -1212,54 +1290,6 @@ class List(Value):
 
     def __repr__(self):
         return f'[{", ".join([repr(x) for x in self.elements])}]'
-
-
-class RTResult:
-    def __init__(self):
-        self.value = None
-        self.error = None
-        self.loop_should_continue = False
-        self.loop_should_break = False
-        self.reset()
-
-    def reset(self):
-        self.value = None
-        self.error = None
-        self.loop_should_continue = False
-        self.loop_should_break = False
-
-    def register(self, res):
-        self.error = res.error
-        self.loop_should_continue = res.loop_should_continue
-        self.loop_should_break = res.loop_should_break
-        return res.value
-
-    def success(self, value):
-        self.reset()
-        self.value = value
-        return self
-
-    def success_continue(self):
-        self.reset()
-        self.loop_should_continue = True
-        return self
-
-    def success_break(self):
-        self.reset()
-        self.loop_should_break = True
-        return self
-
-    def failure(self, error):
-        self.reset()
-        self.error = error
-        return self
-
-    def should_return(self):
-        return (
-                self.error or
-                self.loop_should_continue or
-                self.loop_should_break
-        )
 
 
 class Interpreter:
@@ -1480,6 +1510,7 @@ global_symbol_table.set("print_ret", BuiltInFunction.print_ret)
 global_symbol_table.set("input", BuiltInFunction.input)
 global_symbol_table.set("input_int", BuiltInFunction.input_int)
 global_symbol_table.set("clear", BuiltInFunction.clear)
+global_symbol_table.set("run", BuiltInFunction.run)
 
 
 def run(fn, text):
