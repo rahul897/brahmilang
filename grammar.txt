@@ -1,6 +1,8 @@
 statements: newline* statement (newline+ statement)* newline*
 statement : keyword:var identifier eq comp-expr
-           : com-expr ((and|or) comp_expr)*
+          : com-expr ((and|or) comp_expr)*
+          : continue
+          : break
 com-expr : ne comp-expr
         : arith-expr ((ee|lt|lte|gte|ge) arith-expr)*
 

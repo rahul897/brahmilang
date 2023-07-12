@@ -33,7 +33,7 @@ TT_EOF = 'EOF'
 KEYWORDS = [
     'var', 'and', 'or', 'not',
     "if", "elif", "else", "while",
-    "fun"
+    "fun", "continue", "break"
 ]
 
 
@@ -352,11 +352,23 @@ class BinOpNode:
 
 
 class ListNode:
-  def __init__(self, element_nodes, pos_start, pos_end):
-    self.element_nodes = element_nodes
+    def __init__(self, element_nodes, pos_start, pos_end):
+        self.element_nodes = element_nodes
 
-    self.pos_start = pos_start
-    self.pos_end = pos_end
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
+
+class ContinueNode:
+    def __init__(self, pos_start, pos_end):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
+
+
+class BreakNode:
+    def __init__(self, pos_start, pos_end):
+        self.pos_start = pos_start
+        self.pos_end = pos_end
 
 
 class IfNode:
@@ -659,6 +671,16 @@ class Parser:
     def statement(self):
         res = ParseResult()
         tok = self.curent_tok
+        pos_start = self.curent_tok.pos_start.copy()
+        if self.curent_tok.matches(TT_KEYWORD, 'continue'):
+            res.register_advance()
+            self.advance()
+            return res.success(ContinueNode(pos_start, self.curent_tok.pos_start.copy()))
+
+        if self.curent_tok.matches(TT_KEYWORD, 'break'):
+            res.register_advance()
+            self.advance()
+            return res.success(BreakNode(pos_start, self.curent_tok.pos_start.copy()))
         if not self.curent_tok.matches(TT_KEYWORD, 'var'):
             node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'and'), (TT_KEYWORD, 'or'))))
             if res.error:
@@ -666,7 +688,7 @@ class Parser:
                                                       "Expected int,float,var,identifier,-,+ or ("))
             return res.success(node)
 
-        elif self.curent_tok.matches(TT_KEYWORD, 'var'):
+        if self.curent_tok.matches(TT_KEYWORD, 'var'):
             res.register_advance()
             self.advance()
             define = True
@@ -687,8 +709,7 @@ class Parser:
             return res.success(VarAssignNode(var_name, expr, define))
         else:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected identifier"))
-
+                                                  "Expected identifier"))
 
     def while_expr(self):
         res = ParseResult()
@@ -992,9 +1013,12 @@ class Number(Value):
 
     def __repr__(self):
         return f'{self.value}'
+
+
 Number.null = Number(0)
 Number.false = Number(0)
 Number.true = Number(1)
+
 
 class BaseFunction(Value):
     def __init__(self, name):
@@ -1120,8 +1144,8 @@ class BuiltInFunction(BaseFunction):
     def execute_clear(self, exec_ctx):
         os.system('cls' if os.name == 'nt' else 'cls')
         return RTResult().success(Number.null)
-    execute_clear.arg_names = []
 
+    execute_clear.arg_names = []
 
 
 BuiltInFunction.print = BuiltInFunction("print")
@@ -1192,20 +1216,50 @@ class List(Value):
 
 class RTResult:
     def __init__(self):
-        self.error = None
         self.value = None
+        self.error = None
+        self.loop_should_continue = False
+        self.loop_should_break = False
+        self.reset()
+
+    def reset(self):
+        self.value = None
+        self.error = None
+        self.loop_should_continue = False
+        self.loop_should_break = False
 
     def register(self, res):
-        if res.error: self.error = res.error
+        self.error = res.error
+        self.loop_should_continue = res.loop_should_continue
+        self.loop_should_break = res.loop_should_break
         return res.value
 
-    def success(self, node):
-        self.value = node
+    def success(self, value):
+        self.reset()
+        self.value = value
+        return self
+
+    def success_continue(self):
+        self.reset()
+        self.loop_should_continue = True
+        return self
+
+    def success_break(self):
+        self.reset()
+        self.loop_should_break = True
         return self
 
     def failure(self, error):
+        self.reset()
         self.error = error
         return self
+
+    def should_return(self):
+        return (
+                self.error or
+                self.loop_should_continue or
+                self.loop_should_break
+        )
 
 
 class Interpreter:
@@ -1286,7 +1340,7 @@ class Interpreter:
 
         for element_node in node.element_nodes:
             elements.append(res.register(self.visit(element_node, context)))
-            if res.error: return res
+            if res.should_return(): return res
 
         return res.success(
             List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
@@ -1324,26 +1378,33 @@ class Interpreter:
         res = RTResult()
         for cond, stat in node.cases:
             cond_value = res.register(self.visit(cond, context))
-            if res.error: return res
+            if res.should_return(): return res
 
             if cond_value.is_true():
                 stat_value = res.register(self.visit(stat, context))
-                if res.error: return res
+                if res.should_return(): return res
                 return res.success(stat_value)
         if node.else_case:
             stat_value = res.register(self.visit(node.else_case, context))
-            if res.error: return res
+            if res.should_return(): return res
             return res.success(stat_value)
         return res.success(Number.null)
 
     def visit_WhileNode(self, node, context):
         res = RTResult()
+        value = None
         while True:
             cond_value = res.register(self.visit(node.cond, context))
             if res.error: return res
             if not cond_value.is_true(): break
             value = res.register(self.visit(node.body, context))
             if res.error: return res
+
+            if res.loop_should_continue:
+                continue
+
+            if res.loop_should_break:
+                break
 
         return res.success(value)
 
@@ -1374,8 +1435,14 @@ class Interpreter:
 
         return_value = res.register(value_to_call.execute(args))
         if res.error: return res
-        return_value = return_value.copy().set_pos(node.pos_start,node.pos_end).set_context(context)
+        return_value = return_value.copy().set_pos(node.pos_start, node.pos_end).set_context(context)
         return res.success(return_value)
+
+    def visit_ContinueNode(self, node, context):
+        return RTResult().success_continue()
+
+    def visit_BreakNode(self, node, context):
+        return RTResult().success_break()
 
 
 class Context:
@@ -1413,6 +1480,7 @@ global_symbol_table.set("print_ret", BuiltInFunction.print_ret)
 global_symbol_table.set("input", BuiltInFunction.input)
 global_symbol_table.set("input_int", BuiltInFunction.input_int)
 global_symbol_table.set("clear", BuiltInFunction.clear)
+
 
 def run(fn, text):
     lexer = Lexer(fn, text)
