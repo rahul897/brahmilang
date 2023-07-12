@@ -12,6 +12,8 @@ TT_MUL = 'MUL'
 TT_DIV = 'DIV'
 TT_LPAREN = 'LPAREN'
 TT_RPAREN = 'RPAREN'
+TT_LFPAREN = 'LFPAREN'
+TT_RFPAREN = 'RFPAREN'
 TT_POW = 'POW'
 TT_IDENTIFIER = 'IDENTIFIER'
 TT_KEYWORD = 'KEYWORD'
@@ -25,7 +27,7 @@ TT_LTE = 'LTE'
 TT_EOF = 'EOF'
 
 KEYWORDS = [
-    'var', 'and', 'or', 'not'
+    'var', 'and', 'or', 'not', "if", "elif", "else"
 ]
 
 
@@ -192,6 +194,12 @@ class Lexer:
             elif self.current_char == ')':
                 tokens.append(Token(TT_RPAREN, pos_start=self.pos))
                 self.advance()
+            elif self.current_char == '{':
+                tokens.append(Token(TT_LFPAREN, pos_start=self.pos))
+                self.advance()
+            elif self.current_char == '}':
+                tokens.append(Token(TT_RFPAREN, pos_start=self.pos))
+                self.advance()
             elif self.current_char == '=':
                 tokens.append(self.make_equals())
             elif self.current_char == '!':
@@ -306,6 +314,15 @@ class BinOpNode:
         return f'({self.left_node}, {self.op_tok}, {self.right_node})'
 
 
+class IfNode:
+    def __init__(self, cases, else_case):
+        self.cases = cases
+        self.else_case = else_case
+
+        self.pos_start = cases[0][0].pos_start
+        self.pos_end = else_case.pos_end if else_case else cases[-1][0].pos_end
+
+
 class VarAccessNode:
     def __init__(self, var_name_tok):
         self.var_name_tok = var_name_tok
@@ -391,6 +408,11 @@ class Parser:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                       self.curent_tok.pos_end,
                                                       "Expected ')'"))
+        elif tok.matches(TT_KEYWORD, 'if'):
+            expr = res.register(self.if_expr())
+            if res.error: return res
+            return res.success(expr)
+
         return res.failure(InvalidSyntaxError(tok.pos_start, tok.pos_end,
                                               "Expected int, float,identifier,-,+ or ("))
 
@@ -451,6 +473,50 @@ class Parser:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
                                                   "Expected int,float,var,identifier,-,+ or ("))
         return res.success(node)
+
+    def if_expr(self):
+        res = ParseResult()
+        cases = []
+        else_case = None
+
+        case_pair, error = self.capture_case(res)
+        if error: return res
+        cases.append(case_pair)
+
+        while self.curent_tok.matches(TT_KEYWORD, 'elif'):
+            case_pair, error = self.capture_case(res)
+            if error: return res
+            cases.append(case_pair)
+
+        if self.curent_tok.matches(TT_KEYWORD, 'else'):
+            case_pair, error = self.capture_case(res, 0)
+            if error: return res
+            else_case = case_pair[1]
+        return res.success(IfNode(cases, else_case))
+
+    def capture_case(self, res, calc_expr=1):
+        condition = None
+        res.register_advance()
+        self.advance()
+        if calc_expr != 0:
+            condition = res.register(self.comp_expr())
+            if res.error: return res
+
+        if self.curent_tok.type != TT_LFPAREN:
+            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
+                                                  self.curent_tok.pos_end,
+                                                  "Expected '{'"))
+        res.register_advance()
+        self.advance()
+        statement = res.register(self.statement())
+        if res.error: return res
+        if self.curent_tok.type != TT_RFPAREN:
+            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
+                                                  self.curent_tok.pos_end,
+                                                  "Expected '}'"))
+        res.register_advance()
+        self.advance()
+        return (condition, statement), None
 
     def bin_op(self, func_a, ops, func_b=None):
         if not func_b: func_b = func_a
@@ -537,6 +603,9 @@ class Number:
 
     def notted(self):
         return Number(1 - self.value).set_context(self.context), None
+
+    def is_true(self):
+        return self.value != 0
 
     def set_context(self, context):
         self.context = context
@@ -642,7 +711,7 @@ class Interpreter:
         var_name = node.var_name_tok.value
         value = context.symbol_table.get(var_name)
 
-        if value==None:
+        if value == None:
             return res.failure(RTError(node.pos_start, node.pos_end, f'{var_name} is not defined'))
         value = value.copy().set_pos(node.pos_start, node.pos_end)
         return res.success(value)
@@ -655,6 +724,22 @@ class Interpreter:
         context.symbol_table.set(var_name, value)
 
         return res.success(value)
+
+    def visit_IfNode(self, node, context):
+        res = RTResult()
+        for cond, stat in node.cases:
+            cond_value = res.register(self.visit(cond, context))
+            if res.error: return res
+
+            if cond_value.is_true():
+                stat_value = res.register(self.visit(stat, context))
+                if res.error: return res
+                return res.success(stat_value)
+        if node.else_case:
+            stat_value = res.register(self.visit(node.else_case, context))
+            if res.error: return res
+            return res.success(stat_value)
+        return res.success(None)
 
 
 class Context:
