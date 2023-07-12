@@ -1,3 +1,4 @@
+statements: newline* statement (newline+ statement)* newline*
 statement : keyword:var identifier eq comp-expr
            : com-expr ((and|or) comp_expr)*
 com-expr : ne comp-expr

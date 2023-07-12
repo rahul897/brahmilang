@@ -8,6 +8,7 @@ LETTERS_DIGITS = LETTERS + DIGITS
 TT_INT = 'INT'
 TT_FLOAT = 'FLOAT'
 TT_STRING = 'STRING'
+TT_NEWLINE = 'NEWLINE'
 TT_PLUS = 'PLUS'
 TT_MINUS = 'MINUS'
 TT_MUL = 'MUL'
@@ -180,6 +181,9 @@ class Lexer:
                 tokens.append(self.make_number())
             elif self.current_char == '"':
                 tokens.append(self.make_string())
+            elif self.current_char in ';\n':
+                tokens.append(Token(TT_NEWLINE, pos_start=self.pos))
+                self.advance()
             elif self.current_char == '-':
                 tokens.append(Token(TT_MINUS, pos_start=self.pos))
                 self.advance()
@@ -347,6 +351,14 @@ class BinOpNode:
         return f'({self.left_node}, {self.op_tok}, {self.right_node})'
 
 
+class ListNode:
+  def __init__(self, element_nodes, pos_start, pos_end):
+    self.element_nodes = element_nodes
+
+    self.pos_start = pos_start
+    self.pos_end = pos_end
+
+
 class IfNode:
     def __init__(self, cases, else_case):
         self.cases = cases
@@ -412,24 +424,34 @@ class ParseResult:
     def __init__(self):
         self.error = None
         self.node = None
+        self.last_registered_advance_count = 0
         self.advance_count = 0
+        self.to_reverse_count = 0
+
+    def register_advance(self):
+        self.last_registered_advance_count = 1
+        self.advance_count += 1
 
     def register(self, res):
+        self.last_registered_advance_count = res.advance_count
         self.advance_count += res.advance_count
         if res.error: self.error = res.error
         return res.node
+
+    def try_register(self, res):
+        if res.error:
+            self.to_reverse_count = res.advance_count
+            return None
+        return self.register(res)
 
     def success(self, node):
         self.node = node
         return self
 
     def failure(self, error):
-        if not self.error or self.advance_count == 0:
+        if not self.error or self.last_registered_advance_count == 0:
             self.error = error
         return self
-
-    def register_advance(self):
-        self.advance_count += 1
 
 
 class Parser:
@@ -439,7 +461,7 @@ class Parser:
         self.advance()
 
     def parse(self):
-        res = self.statement()
+        res = self.statements()
         if not res.error and self.curent_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
                                                   "Expected +,-,*,/"))
@@ -447,9 +469,17 @@ class Parser:
 
     def advance(self):
         self.tok_idx += 1
-        if self.tok_idx < len(self.tokens):
-            self.curent_tok = self.tokens[self.tok_idx]
+        self.update_current_tok()
         return self.curent_tok
+
+    def reverse(self, amount=1):
+        self.tok_idx -= amount
+        self.update_current_tok()
+        return self.curent_tok
+
+    def update_current_tok(self):
+        if 0 <= self.tok_idx < len(self.tokens):
+            self.curent_tok = self.tokens[self.tok_idx]
 
     def bin_op(self, func_a, ops, func_b=None):
         if not func_b: func_b = func_a
@@ -588,6 +618,44 @@ class Parser:
                                                   "Expected int,float,var,identifier,-,+ or (, not"))
         return res.success(node)
 
+    def statements(self):
+        res = ParseResult()
+        statements = []
+        pos_start = self.curent_tok.pos_start.copy()
+
+        while self.curent_tok.type == TT_NEWLINE:
+            res.register_advance()
+            self.advance()
+
+        statement = res.register(self.statement())
+        if res.error: return res
+        statements.append(statement)
+
+        more_statements = True
+
+        while True:
+            newline_count = 0
+            while self.curent_tok.type == TT_NEWLINE:
+                res.register_advance()
+                self.advance()
+                newline_count += 1
+            if newline_count == 0:
+                more_statements = False
+
+            if not more_statements: break
+            statement = res.try_register(self.statement())
+            if not statement:
+                self.reverse(res.to_reverse_count)
+                more_statements = False
+                continue
+            statements.append(statement)
+
+        return res.success(ListNode(
+            statements,
+            pos_start,
+            self.curent_tok.pos_end.copy()
+        ))
+
     def statement(self):
         res = ParseResult()
         tok = self.curent_tok
@@ -672,7 +740,7 @@ class Parser:
         res.register_advance()
         self.advance()
 
-        node_to_return = self.capture_node(res, self.comp_expr)
+        node_to_return = self.capture_node(res, self.statements)
         if res.error: return res
         return res.success(FunDefNode(var_name_tok, arg_name_toks, node_to_return))
 
@@ -704,7 +772,7 @@ class Parser:
             condition = res.register(self.comp_expr())
             if res.error: return res
 
-        statement = self.capture_node(res, self.statement)
+        statement = self.capture_node(res, self.statements)
         return (condition, statement), None
 
     def capture_node(self, res, fun):
@@ -1063,6 +1131,65 @@ BuiltInFunction.input_int = BuiltInFunction("input_int")
 BuiltInFunction.clear = BuiltInFunction("clear")
 
 
+class List(Value):
+    def __init__(self, elements):
+        super().__init__()
+        self.elements = elements
+
+    def added_to(self, other):
+        new_list = self.copy()
+        new_list.elements.append(other)
+        return new_list, None
+
+    def subbed_by(self, other):
+        if isinstance(other, Number):
+            new_list = self.copy()
+            try:
+                new_list.elements.pop(other.value)
+                return new_list, None
+            except:
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'Element at this index could not be removed from list because index is out of bounds',
+                    self.context
+                )
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def multed_by(self, other):
+        if isinstance(other, List):
+            new_list = self.copy()
+            new_list.elements.extend(other.elements)
+            return new_list, None
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def dived_by(self, other):
+        if isinstance(other, Number):
+            try:
+                return self.elements[other.value], None
+            except:
+                return None, RTError(
+                    other.pos_start, other.pos_end,
+                    'Element at this index could not be retrieved from list because index is out of bounds',
+                    self.context
+                )
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def copy(self):
+        copy = List(self.elements)
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+        return copy
+
+    def __str__(self):
+        return ", ".join([str(x) for x in self.elements])
+
+    def __repr__(self):
+        return f'[{", ".join([repr(x) for x in self.elements])}]'
+
+
 class RTResult:
     def __init__(self):
         self.error = None
@@ -1153,6 +1280,18 @@ class Interpreter:
             return res.failure(error)
         return res.success(number.set_pos(node.pos_start, node.pos_end))
 
+    def visit_ListNode(self, node, context):
+        res = RTResult()
+        elements = []
+
+        for element_node in node.element_nodes:
+            elements.append(res.register(self.visit(element_node, context)))
+            if res.error: return res
+
+        return res.success(
+            List(elements).set_context(context).set_pos(node.pos_start, node.pos_end)
+        )
+
     def visit_VarAccessNode(self, node, context):
         res = RTResult()
         var_name = node.var_name_tok.value
@@ -1195,7 +1334,7 @@ class Interpreter:
             stat_value = res.register(self.visit(node.else_case, context))
             if res.error: return res
             return res.success(stat_value)
-        return res.success(None)
+        return res.success(Number.null)
 
     def visit_WhileNode(self, node, context):
         res = RTResult()
