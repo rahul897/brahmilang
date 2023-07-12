@@ -1,8 +1,11 @@
-statement : keyword:var identifier eq expr
-           : expr
-expr    : term ((plus|minus) term)*
+statement : keyword:var identifier eq arith-expr
+           : com-expr ((and|or) comp_expr)*
+com-expr : ne comp-expr
+        : arith-expr ((ee|lt|lte|gte|ge) arith-expr)*
+
+arith-expr : term ((plus|minus) term)*
 term : factor ((mul|div) factor)*
 factor: (plus|minus) factor | power
 power: atom (pow factor)*
 atom  : int|float| identifier
-      : lparen expr rparen
+      : lparen arith-expr rparen
