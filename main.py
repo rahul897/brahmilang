@@ -6,6 +6,7 @@ LETTERS_DIGITS = LETTERS + DIGITS
 
 TT_INT = 'INT'
 TT_FLOAT = 'FLOAT'
+TT_STRING = 'STRING'
 TT_PLUS = 'PLUS'
 TT_MINUS = 'MINUS'
 TT_MUL = 'MUL'
@@ -176,6 +177,8 @@ class Lexer:
                 tokens.append(self.make_identifier())
             elif self.current_char in DIGITS:
                 tokens.append(self.make_number())
+            elif self.current_char == '"':
+                tokens.append(self.make_string())
             elif self.current_char == '-':
                 tokens.append(Token(TT_MINUS, pos_start=self.pos))
                 self.advance()
@@ -222,6 +225,18 @@ class Lexer:
 
         tokens.append(Token(TT_EOF, pos_start=self.pos))
         return tokens, None
+
+    def make_string(self):
+        string = ''
+        pos_start = self.pos.copy()
+        self.advance()
+
+        while self.current_char != None and self.current_char != '"':
+            string += self.current_char
+            self.advance()
+
+        self.advance()
+        return Token(TT_STRING, string, pos_start, self.pos)
 
     def make_number(self):
         num_str = ''
@@ -302,6 +317,17 @@ class NumberNode:
         self.tok = tok
         self.pos_start = tok.pos_start
         self.pos_end = tok.pos_end
+
+    def __repr__(self):
+        return f'{self.tok}'
+
+
+class StringNode:
+    def __init__(self, tok):
+        self.tok = tok
+
+        self.pos_start = self.tok.pos_start
+        self.pos_end = self.tok.pos_end
 
     def __repr__(self):
         return f'{self.tok}'
@@ -482,6 +508,10 @@ class Parser:
             res.register_advance()
             self.advance()
             return res.success(NumberNode(tok))
+        elif tok.type == TT_STRING:
+            res.register_advance()
+            self.advance()
+            return res.success(StringNode(tok))
         elif tok.type == TT_IDENTIFIER:
             res.register_advance()
             self.advance()
@@ -756,6 +786,36 @@ class Value:
         return RTError(self.pos_start, self.pos_end, "Illegal operation", self.context)
 
 
+class String(Value):
+    def __init__(self, value):
+        super().__init__()
+        self.value = value
+
+    def added_by(self, other):
+        if isinstance(other, String):
+            return String(self.value + other.value).set_context(self.context), None
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def multed_by(self, other):
+        if isinstance(other, Number):
+            return String(self.value * other.value).set_context(self.context), None
+        else:
+            return None, Value.illegal_operation(self, other)
+
+    def is_true(self):
+        return len(self.value) > 0
+
+    def copy(self):
+        copy = String(self.value)
+        copy.set_pos(self.pos_start, self.pos_end)
+        copy.set_context(self.context)
+        return copy
+
+    def __repr__(self):
+        return f'"{self.value}"'
+
+
 class Number(Value):
     def __init__(self, value):
         super().__init__()
@@ -924,6 +984,11 @@ class Interpreter:
 
     def visit_NumberNode(self, node, context):
         return RTResult().success(Number(node.tok.value)
+                                  .set_context(context)
+                                  .set_pos(node.pos_start, node.pos_end))
+
+    def visit_StringNode(self, node, context):
+        return RTResult().success(String(node.tok.value)
                                   .set_context(context)
                                   .set_pos(node.pos_start, node.pos_end))
 
