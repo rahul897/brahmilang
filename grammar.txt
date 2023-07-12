@@ -1,6 +1,5 @@
 statement : keyword:var identifier eq comp_expr
            : identifier eq comp_expr
-           : identifier
            : com-expr ((and|or) comp_expr)*
 com-expr : ne comp-expr
         : arith-expr ((ee|lt|lte|gte|ge) arith-expr)*
@@ -8,10 +7,13 @@ com-expr : ne comp-expr
 arith-expr : term ((plus|minus) term)*
 term : factor ((mul|div) factor)*
 factor: (plus|minus) factor | power
-power: atom (pow factor)*
+power: call (pow factor)*
+call : atom (lparen (comp_expr (, comp_expr)*)? rparen)?
 atom  : int|float| identifier
       : lparen arith-expr rparen
       : if-expr
       : while-expr
+      : fun-def
 if-expr: if comp-expr { statement} (elif {statement})* (else {statement})?
-while-expr: while expr { statement }
+while-expr: while comp-expr { statement }
+fun-def : fun identifier? lparen  (identifier (, identifier)*)? rparen { statement }
