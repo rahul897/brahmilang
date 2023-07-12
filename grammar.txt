@@ -1,6 +1,8 @@
-expr : term ((plus|minus) term)*
+statement : keyword:var identifier eq expr
+           : expr
+expr    : term ((plus|minus) term)*
 term : factor ((mul|div) factor)*
-factor: (plus|minus) factor
+factor: (plus|minus) factor | power
 power: atom (pow factor)*
-atom  : int|float
+atom  : int|float| identifier
       : lparen expr rparen
