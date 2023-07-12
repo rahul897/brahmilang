@@ -470,8 +470,13 @@ class Parser:
     def power(self):
         return self.bin_op(self.atom, (TT_POW), self.factor)
 
-    def call(self, atom):
+    def call(self):
         res = ParseResult()
+        tok = self.curent_tok
+        if tok.type == TT_IDENTIFIER:
+            res.register_advance()
+            self.advance()
+            atom = VarAccessNode(tok)
 
         if self.curent_tok.type == TT_LPAREN:
             res.register_advance()
@@ -498,9 +503,14 @@ class Parser:
                 res.register_advance()
                 self.advance()
             return res.success(CallNode(atom, arg_nodes))
-        else:
-            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected int,float,var,identifier,-,+ or ("))
+        elif self.curent_tok.type == TT_EQ:
+            res.register_advance()
+            self.advance()
+            expr = res.register(self.comp_expr())
+            if res.error: return res
+            return res.success(VarAssignNode(tok, expr, False))
+
+        return res.success(atom)
 
     def atom(self):
         res = ParseResult()
@@ -514,9 +524,9 @@ class Parser:
             self.advance()
             return res.success(StringNode(tok))
         elif tok.type == TT_IDENTIFIER:
-            res.register_advance()
-            self.advance()
-            return res.success(VarAccessNode(tok))
+            node = res.register(self.call())
+            if res.error: return res
+            return res.success(node)
         elif tok.type == TT_LPAREN:
             res.register_advance()
             self.advance()
@@ -581,38 +591,36 @@ class Parser:
     def statement(self):
         res = ParseResult()
         tok = self.curent_tok
-        if not (self.curent_tok.matches(TT_KEYWORD, 'var') or self.curent_tok.type == TT_IDENTIFIER):
+        if not self.curent_tok.matches(TT_KEYWORD, 'var'):
             node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'and'), (TT_KEYWORD, 'or'))))
             if res.error:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
                                                       "Expected int,float,var,identifier,-,+ or ("))
             return res.success(node)
 
-        define = False
-        if self.curent_tok.matches(TT_KEYWORD, 'var'):
+        elif self.curent_tok.matches(TT_KEYWORD, 'var'):
             res.register_advance()
             self.advance()
             define = True
 
-        if self.curent_tok.type != TT_IDENTIFIER:
-            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected identifier"))
-        var_name = self.curent_tok
-        res.register_advance()
-        self.advance()
-        if self.curent_tok.type == TT_LPAREN:
-            expr = res.register(self.call(VarAccessNode(var_name)))
+            if self.curent_tok.type != TT_IDENTIFIER:
+                return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
+                                                      "Expected identifier"))
+            var_name = self.curent_tok
+            res.register_advance()
+            self.advance()
+            if self.curent_tok.type != TT_EQ:
+                return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
+                                                      "Expected ="))
+            res.register_advance()
+            self.advance()
+            expr = res.register(self.comp_expr())
             if res.error: return res
-
-            return res.success(expr)
-        if self.curent_tok.type != TT_EQ:
+            return res.success(VarAssignNode(var_name, expr, define))
+        else:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected ="))
-        res.register_advance()
-        self.advance()
-        expr = res.register(self.statement())
-        if res.error: return res
-        return res.success(VarAssignNode(var_name, expr, define))
+                                                      "Expected identifier"))
+
 
     def while_expr(self):
         res = ParseResult()
