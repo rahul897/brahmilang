@@ -31,9 +31,10 @@ TT_LTE = 'LTE'
 TT_EOF = 'EOF'
 
 KEYWORDS = [
-    'var', 'and', 'or', 'not',
-    "if", "elif", "else", "while",
-    "fun", "continue", "break"
+    'bokka ji', 'inka', 'kani', 'not',
+    'idi ok antaventra', 'kaneesam idi', 'poni idi', 'nuv line lo undu',
+    'fun', 'nannu involve cheyakandi', 'aapandroi',
+    'aa chupentra idi chudu'
 ]
 
 
@@ -75,13 +76,14 @@ class Error:
     def as_string(self):
         result = f'{self.error_name}:{self.details}'
         result += f'\nFile {self.pos_start.fn}, Line {self.pos_start.ln + 1}'
-        result += '\n\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end)
+        result += '\n' + string_with_arrows(self.pos_start.ftxt, self.pos_start, self.pos_end)
         return result
 
 
 class IllegalCharError(Error):
     def __init__(self, pos_start, pos_end, details):
         super().__init__(pos_start, pos_end, "Illegal character", details)
+
 
 
 class InvalidSyntaxError(Error):
@@ -163,6 +165,7 @@ class Lexer:
         self.text = text
         self.pos = Position(-1, 0, -1, fn, text)
         self.current_char = None
+        self.tokens = []
         self.advance()
 
     def advance(self):
@@ -170,7 +173,7 @@ class Lexer:
         self.current_char = self.text[self.pos.idx] if self.pos.idx < len(self.text) else None
 
     def make_tokens(self):
-        tokens = []
+        tokens = self.tokens
 
         while self.current_char != None:
             if self.current_char in ' \t':
@@ -265,11 +268,24 @@ class Lexer:
     def make_identifier(self):
         id_str = ''
         pos_start = self.pos.copy()
-        while self.current_char != None and self.current_char in LETTERS_DIGITS + '_':
-            id_str += self.current_char
-            self.advance()
+        keyword_not_found = True
+        for keyword in KEYWORDS:
+            exp_len = self.pos.idx + len(keyword)
+            if exp_len <= len(self.text) and \
+                    self.text[self.pos.idx:exp_len] == keyword:
+                keyword_not_found = False
+                id_str = keyword
+                for i in range(len(keyword)):
+                    self.advance()
+
+        if keyword_not_found:
+            while self.current_char is not None and self.current_char in LETTERS_DIGITS + '_':
+                id_str += self.current_char
+                self.advance()
 
         tok_type = TT_KEYWORD if id_str in KEYWORDS else TT_IDENTIFIER
+        if id_str == 'aa chupentra idi chudu':
+            return Token(TT_IDENTIFIER, 'print', pos_start, self.pos)
         return Token(tok_type, id_str, pos_start, self.pos)
 
     def make_equals(self):
@@ -531,7 +547,7 @@ class Parser:
                 arg_nodes.append(res.register(self.comp_expr()))
                 if res.error:
                     return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                          "Expected int,float,var,identifier,-,+ or (, not,)"))
+                                                          "Expected int,float,bokka ji,identifier,-,+ or (, not,)"))
                 while self.curent_tok.type == TT_COMMA:
                     res.register_advance()
                     self.advance()
@@ -582,11 +598,11 @@ class Parser:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                       self.curent_tok.pos_end,
                                                       "Expected ')'"))
-        elif tok.matches(TT_KEYWORD, 'if'):
+        elif tok.matches(TT_KEYWORD, 'idi ok antaventra'):
             expr = res.register(self.if_expr())
             if res.error: return res
             return res.success(expr)
-        elif tok.matches(TT_KEYWORD, 'while'):
+        elif tok.matches(TT_KEYWORD, 'nuv line lo undu'):
             expr = res.register(self.while_expr())
             if res.error: return res
             return res.success(expr)
@@ -627,7 +643,7 @@ class Parser:
         node = res.register(self.bin_op(self.arith_expr, (TT_GTE, TT_GT, TT_LT, TT_LTE, TT_EE, TT_NE)))
         if res.error:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected int,float,var,identifier,-,+ or (, not"))
+                                                  "Expected int,float,bokka ji,identifier,-,+ or (, not"))
         return res.success(node)
 
     def statements(self):
@@ -651,6 +667,10 @@ class Parser:
                 res.register_advance()
                 self.advance()
                 newline_count += 1
+            j = self.tok_idx - 1
+            while self.tokens[j].type == TT_NEWLINE:
+                newline_count += 1
+                j -= 1
             if newline_count == 0:
                 more_statements = False
 
@@ -672,23 +692,23 @@ class Parser:
         res = ParseResult()
         tok = self.curent_tok
         pos_start = self.curent_tok.pos_start.copy()
-        if self.curent_tok.matches(TT_KEYWORD, 'continue'):
+        if self.curent_tok.matches(TT_KEYWORD, 'nannu involve cheyakandi'):
             res.register_advance()
             self.advance()
             return res.success(ContinueNode(pos_start, self.curent_tok.pos_start.copy()))
 
-        if self.curent_tok.matches(TT_KEYWORD, 'break'):
+        if self.curent_tok.matches(TT_KEYWORD, 'aapandroi'):
             res.register_advance()
             self.advance()
             return res.success(BreakNode(pos_start, self.curent_tok.pos_start.copy()))
-        if not self.curent_tok.matches(TT_KEYWORD, 'var'):
-            node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'and'), (TT_KEYWORD, 'or'))))
+        if not self.curent_tok.matches(TT_KEYWORD, 'bokka ji'):
+            node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'inka'), (TT_KEYWORD, 'kani'))))
             if res.error:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected int,float,var,identifier,-,+ or ("))
+                                                      "Expected int,float,bokka ji,identifier,-,+ or ("))
             return res.success(node)
 
-        if self.curent_tok.matches(TT_KEYWORD, 'var'):
+        if self.curent_tok.matches(TT_KEYWORD, 'bokka ji'):
             res.register_advance()
             self.advance()
             define = True
@@ -773,13 +793,19 @@ class Parser:
         case_pair, error = self.capture_case(res)
         if error: return res
         cases.append(case_pair)
+        while self.curent_tok.type == TT_NEWLINE:
+            res.register_advance()
+            self.advance()
 
-        while self.curent_tok.matches(TT_KEYWORD, 'elif'):
+        while self.curent_tok.matches(TT_KEYWORD, 'kaneesam idi'):
             case_pair, error = self.capture_case(res)
             if error: return res
             cases.append(case_pair)
+        while self.curent_tok.type == TT_NEWLINE:
+            res.register_advance()
+            self.advance()
 
-        if self.curent_tok.matches(TT_KEYWORD, 'else'):
+        if self.curent_tok.matches(TT_KEYWORD, 'poni idi'):
             case_pair, error = self.capture_case(res, 0)
             if error: return res
             else_case = case_pair[1]
@@ -1341,9 +1367,9 @@ class Interpreter:
             result, error = left.gt_comp(right)
         elif node.op_tok.type == TT_GTE:
             result, error = left.gte_comp(right)
-        elif node.op_tok.matches(TT_KEYWORD, 'and'):
+        elif node.op_tok.matches(TT_KEYWORD, 'inka'):
             result, error = left.anded_by(right)
-        elif node.op_tok.matches(TT_KEYWORD, 'or'):
+        elif node.op_tok.matches(TT_KEYWORD, 'kani'):
             result, error = left.ored_by(right)
 
         if error:

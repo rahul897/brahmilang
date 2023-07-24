@@ -1,6 +1,25 @@
-print("hello universe")
+bokka ji a = 10
+a = a+3
 
-var i = 5
-if i==5 {
-    print(i*5)
+aa chupentra idi chudu("ipudu a value ochesi:")
+aa chupentra idi chudu(a)
+aa chupentra idi chudu("____________")
+
+idi ok antaventra a==13 {
+    aa chupentra idi chudu(a)
+}
+
+nuv line lo undu a>0 {
+    a = a - 1
+    idi ok antaventra a==7 {
+        nannu involve cheyakandi
+    }
+    kaneesam idi a==5{
+        aapandroi
+    }
+    poni idi {
+        aa chupentra idi chudu(a*2)
+    }
+
+    aa chupentra idi chudu("print chesa tammudu")
 }
