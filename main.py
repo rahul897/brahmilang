@@ -1,8 +1,5 @@
-import os
-import string
-
 DIGITS = '0123456789'
-LETTERS = string.ascii_letters
+LETTERS = 'qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM'
 LETTERS_DIGITS = LETTERS + DIGITS
 
 TT_INT = 'INT'
@@ -31,10 +28,10 @@ TT_LTE = 'LTE'
 TT_EOF = 'EOF'
 
 KEYWORDS = [
-    'bokka ji', 'inka', 'kani', 'not',
-    'idi ok antaventra', 'kaneesam idi', 'poni idi', 'nuv line lo undu',
+    'ipudu', 'kani', 'not',
+    'idi ok antaventra', 'kaneesam idi', 'inka ide', 'nuv line lo undu',
     'fun', 'nannu involve cheyakandi', 'aapandroi',
-    'aa chupentra idi chudu'
+    'aa chupentra idi chudu', 'inka', 'excuse me', 'nen vastanu babu'
 ]
 
 
@@ -83,7 +80,6 @@ class Error:
 class IllegalCharError(Error):
     def __init__(self, pos_start, pos_end, details):
         super().__init__(pos_start, pos_end, "Illegal character", details)
-
 
 
 class InvalidSyntaxError(Error):
@@ -225,14 +221,30 @@ class Lexer:
                 tokens.append(self.make_less_than())
             elif self.current_char == '>':
                 tokens.append(self.make_greater_than())
+            elif self.current_char == '#':
+                self.make_comment()
             else:
                 pos_start = self.pos.copy()
                 char = self.current_char
                 self.advance()
                 return [], IllegalCharError(pos_start, self.pos, f'"{char}"')
+            if tokens[-1].matches(TT_KEYWORD, 'nen vastanu babu'):
+                break
 
         tokens.append(Token(TT_EOF, pos_start=self.pos))
         return tokens, None
+
+    def make_comment(self):
+        string = ''
+        pos_start = self.pos.copy()
+        self.advance()
+
+        while self.current_char != None and self.current_char not in ';\n':
+            string += self.current_char
+            self.advance()
+
+        self.advance()
+        return Token(TT_STRING, string, pos_start, self.pos)
 
     def make_string(self):
         string = ''
@@ -489,7 +501,7 @@ class Parser:
         self.advance()
 
     def parse(self):
-        res = self.statements()
+        res = self.start()
         if not res.error and self.curent_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
                                                   "Expected +,-,*,/"))
@@ -547,7 +559,7 @@ class Parser:
                 arg_nodes.append(res.register(self.comp_expr()))
                 if res.error:
                     return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                          "Expected int,float,bokka ji,identifier,-,+ or (, not,)"))
+                                                          "Expected int,float,ipudu,identifier,-,+ or (, not,)"))
                 while self.curent_tok.type == TT_COMMA:
                     res.register_advance()
                     self.advance()
@@ -643,8 +655,28 @@ class Parser:
         node = res.register(self.bin_op(self.arith_expr, (TT_GTE, TT_GT, TT_LT, TT_LTE, TT_EE, TT_NE)))
         if res.error:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected int,float,bokka ji,identifier,-,+ or (, not"))
+                                                  "Expected int,float,ipudu,identifier,-,+ or (, not"))
         return res.success(node)
+
+    def start(self):
+        res = ParseResult()
+        if self.curent_tok.matches(TT_KEYWORD, 'excuse me'):
+            res.register_advance()
+            self.advance()
+        else:
+            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
+                                                  "manners undakkarleda, 'excuse me' to start chey bro"))
+        node = res.register(self.statements())
+        if res.error: return res
+        if self.curent_tok.matches(TT_KEYWORD, 'nen vastanu babu'):
+            res.register_advance()
+            self.advance()
+        else:
+            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
+                                                  "vellemundu 'nenu vastanu babu' ani cheppadam samskaram bro"))
+
+        return res.success(node)
+
 
     def statements(self):
         res = ParseResult()
@@ -701,14 +733,14 @@ class Parser:
             res.register_advance()
             self.advance()
             return res.success(BreakNode(pos_start, self.curent_tok.pos_start.copy()))
-        if not self.curent_tok.matches(TT_KEYWORD, 'bokka ji'):
+        if not self.curent_tok.matches(TT_KEYWORD, 'ipudu'):
             node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'inka'), (TT_KEYWORD, 'kani'))))
             if res.error:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected int,float,bokka ji,identifier,-,+ or ("))
+                                                      "Expected int,float,ipudu,identifier,-,+ or ("))
             return res.success(node)
 
-        if self.curent_tok.matches(TT_KEYWORD, 'bokka ji'):
+        if self.curent_tok.matches(TT_KEYWORD, 'ipudu'):
             res.register_advance()
             self.advance()
             define = True
@@ -805,7 +837,7 @@ class Parser:
             res.register_advance()
             self.advance()
 
-        if self.curent_tok.matches(TT_KEYWORD, 'poni idi'):
+        if self.curent_tok.matches(TT_KEYWORD, 'inka ide'):
             case_pair, error = self.capture_case(res, 0)
             if error: return res
             else_case = case_pair[1]
@@ -1187,7 +1219,11 @@ class BuiltInFunction(BaseFunction):
         return f"<built-in function {self.name}>"
 
     def execute_print(self, exec_ctx):
-        print(str(exec_ctx.symbol_table.get('value')))
+        global output_element
+        output = str(exec_ctx.symbol_table.get('value'))
+        print(output)
+        # if output_element is not None:
+        #     output_element.element.innerHTML += output.replace('\n', '<br>')+'<br'
         return RTResult().success(Number.null)
 
     execute_print.arg_names = ['value']
@@ -1215,11 +1251,11 @@ class BuiltInFunction(BaseFunction):
 
     execute_input_int.arg_names = []
 
-    def execute_clear(self, exec_ctx):
-        os.system('cls' if os.name == 'nt' else 'cls')
-        return RTResult().success(Number.null)
-
-    execute_clear.arg_names = []
+    # def execute_clear(self, exec_ctx):
+    #     os.system('cls' if os.name == 'nt' else 'cls')
+    #     return RTResult().success(Number.null)
+    #
+    # execute_clear.arg_names = []
 
     def execute_run(self, exec_ctx):
         fn = exec_ctx.symbol_table.get('fn')
@@ -1239,12 +1275,12 @@ class BuiltInFunction(BaseFunction):
                 self.pos_start, self.pos_end,
                 f'failed to load script {fn}\n' + str(e), exec_ctx
             ))
-        _, error = run(fn, script)
+        _, error = interpret(fn, script)
 
         if error:
             return RTResult().failure(RTError(
                 self.pos_start, self.pos_end,
-                f'failed to finish executing {fn}\n' + error.as_string(), exec_ctx
+                f'failed to finish executing {fn}\n' + error, exec_ctx
             ))
         return RTResult().success(Number.null)
 
@@ -1527,30 +1563,42 @@ class SymbolTable:
         del self.symbols[name]
 
 
-global_symbol_table = SymbolTable()
-global_symbol_table.set("null", Number(0))
-global_symbol_table.set("false", Number(0))
-global_symbol_table.set("true", Number(1))
-global_symbol_table.set("print", BuiltInFunction.print)
-global_symbol_table.set("print_ret", BuiltInFunction.print_ret)
-global_symbol_table.set("input", BuiltInFunction.input)
-global_symbol_table.set("input_int", BuiltInFunction.input_int)
-global_symbol_table.set("clear", BuiltInFunction.clear)
-global_symbol_table.set("run", BuiltInFunction.run)
+def set_symbol_table():
+    global_symbol_table = SymbolTable()
+    global_symbol_table.set("null", Number(0))
+    global_symbol_table.set("false", Number(0))
+    global_symbol_table.set("true", Number(1))
+    global_symbol_table.set("print", BuiltInFunction.print)
+    global_symbol_table.set("print_ret", BuiltInFunction.print_ret)
+    global_symbol_table.set("input", BuiltInFunction.input)
+    global_symbol_table.set("input_int", BuiltInFunction.input_int)
+    global_symbol_table.set("clear", BuiltInFunction.clear)
+    global_symbol_table.set("run", BuiltInFunction.run)
+    return global_symbol_table
 
 
-def run(fn, text):
+def interpret(fn, text):
     lexer = Lexer(fn, text)
     tokens, error = lexer.make_tokens()
-    if error: return None, error
+    if error: return None, error.as_string()
 
     parser = Parser(tokens)
     ast = parser.parse()
-    if ast.error: return None, ast.error
+    if ast.error: return None, ast.error.as_string()
 
     interpreter = Interpreter()
     context = Context("<program>")
-    context.symbol_table = global_symbol_table
+    context.symbol_table = set_symbol_table()
     result = interpreter.visit(ast.node, context)
 
-    return result.value, result.error
+    return result.value, result.error.as_string() if result.error else None
+
+
+def run_code(code):
+    try:
+        result, error = interpret('playground', code)
+        if error:
+            return error
+    except Exception as e:
+        print(e)
+        return "ante adi... ram"

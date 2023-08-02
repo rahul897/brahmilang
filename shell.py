@@ -2,9 +2,9 @@ import main
 
 while True:
     text = input('brahmi > ')
-    result, error = main.run('<stdin>', text)
+    result, error = main.interpret('<stdin>', text)
 
     if error:
-        print(error.as_string())
+        print(error)
     else:
         print(result)

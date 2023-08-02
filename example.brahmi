@@ -1,25 +1,25 @@
-bokka ji a = 10
-a = a+3
+excuse me
+    ipudu a = 10
+    a = a+3
+    #alhfalilp
+    aa chupentra idi chudu("ipudu a value ochesi:")
+    aa chupentra idi chudu(a+5)
+    aa chupentra idi chudu("____________")
 
-aa chupentra idi chudu("ipudu a value ochesi:")
-aa chupentra idi chudu(a)
-aa chupentra idi chudu("____________")
-
-idi ok antaventra a==13 {
-    aa chupentra idi chudu(a)
-}
-
-nuv line lo undu a>0 {
-    a = a - 1
-    idi ok antaventra a==7 {
-        nannu involve cheyakandi
-    }
-    kaneesam idi a==5{
-        aapandroi
-    }
-    poni idi {
-        aa chupentra idi chudu(a*2)
+    idi ok antaventra a==13 {
+        aa chupentra idi chudu(a)
     }
 
-    aa chupentra idi chudu("print chesa tammudu")
-}
+    nuv line lo undu a>0 {
+        a = a - 1
+        idi ok antaventra a==7 {
+            nannu involve cheyakandi
+        }
+        kaneesam idi a==5{
+            aapandroi
+        }
+        inka ide {
+            aa chupentra idi chudu(a*2)
+        }
+    }
+nen vastanu babu
