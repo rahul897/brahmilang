@@ -660,6 +660,9 @@ class Parser:
 
     def start(self):
         res = ParseResult()
+        while self.curent_tok.type == TT_NEWLINE:
+            res.register_advance()
+            self.advance()
         if self.curent_tok.matches(TT_KEYWORD, 'excuse me'):
             res.register_advance()
             self.advance()
@@ -676,7 +679,6 @@ class Parser:
                                                   "vellemundu 'nenu vastanu babu' ani cheppadam samskaram bro"))
 
         return res.success(node)
-
 
     def statements(self):
         res = ParseResult()
@@ -1598,7 +1600,7 @@ def run_code(code):
     try:
         result, error = interpret('playground', code)
         if error:
-            return error
+            print("@#@%@error: " + error)
     except Exception as e:
-        print(e)
-        return "ante adi... ram"
+        # print(e)
+        print("@#@%@error: " +"ante adi... ram, general ga panicheyali kani ....")

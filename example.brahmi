@@ -1,7 +1,8 @@
+
 excuse me
     ipudu a = 10
     a = a+3
-    #alhfalilp
+    # e line unna lekapoina okate
     aa chupentra idi chudu("ipudu a value ochesi:")
     aa chupentra idi chudu(a+5)
     aa chupentra idi chudu("____________")
