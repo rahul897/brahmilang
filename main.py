@@ -478,11 +478,14 @@ class ParseResult:
         if res.error: self.error = res.error
         return res.node
 
-    def try_register(self, res):
+    def try_register(self, res, exit=False):
         if res.error:
             self.to_reverse_count = res.advance_count
-            return None
-        return self.register(res)
+            if exit:
+                return None, None
+            else:
+                return None, self.register(res)
+        return self.register(res), None
 
     def success(self, node):
         self.node = node
@@ -663,6 +666,12 @@ class Parser:
         while self.curent_tok.type == TT_NEWLINE:
             res.register_advance()
             self.advance()
+
+        if self.curent_tok.matches(TT_IDENTIFIER, 'run'):
+            node = res.register(self.statements())
+            if res.error: return res
+            return res.success(node)
+
         if self.curent_tok.matches(TT_KEYWORD, 'excuse me'):
             res.register_advance()
             self.advance()
@@ -670,7 +679,8 @@ class Parser:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
                                                   "manners undakkarleda, 'excuse me' to start chey bro"))
         node = res.register(self.statements())
-        if res.error: return res
+        if res.error:
+            return res
         if self.curent_tok.matches(TT_KEYWORD, 'nen vastanu babu'):
             res.register_advance()
             self.advance()
@@ -679,6 +689,10 @@ class Parser:
                                                   "vellemundu 'nenu vastanu babu' ani cheppadam samskaram bro"))
 
         return res.success(node)
+
+    def check_end(self):
+        tok_cur = self.tokens[self.tok_idx]
+        return tok_cur.type in [TT_RFPAREN] or tok_cur.matches(TT_KEYWORD, 'nen vastanu babu')
 
     def statements(self):
         res = ParseResult()
@@ -709,7 +723,10 @@ class Parser:
                 more_statements = False
 
             if not more_statements: break
-            statement = res.try_register(self.statement())
+            res1 = self.statement()
+            statement, error = res.try_register(res1, self.check_end())
+            if error:
+                return res
             if not statement:
                 self.reverse(res.to_reverse_count)
                 more_statements = False
@@ -768,7 +785,7 @@ class Parser:
     def while_expr(self):
         res = ParseResult()
         case_pair, error = self.capture_case(res)
-        if error: return res
+        if error: return error
         return res.success(WhileNode(case_pair[0], case_pair[1]))
 
     def fun_def(self):
@@ -825,7 +842,7 @@ class Parser:
         else_case = None
 
         case_pair, error = self.capture_case(res)
-        if error: return res
+        if error: return error
         cases.append(case_pair)
         while self.curent_tok.type == TT_NEWLINE:
             res.register_advance()
@@ -833,7 +850,7 @@ class Parser:
 
         while self.curent_tok.matches(TT_KEYWORD, 'kaneesam idi'):
             case_pair, error = self.capture_case(res)
-            if error: return res
+            if error: return error
             cases.append(case_pair)
         while self.curent_tok.type == TT_NEWLINE:
             res.register_advance()
@@ -841,7 +858,7 @@ class Parser:
 
         if self.curent_tok.matches(TT_KEYWORD, 'inka ide'):
             case_pair, error = self.capture_case(res, 0)
-            if error: return res
+            if error: return error
             else_case = case_pair[1]
         return res.success(IfNode(cases, else_case))
 
@@ -851,27 +868,30 @@ class Parser:
         self.advance()
         if calc_expr != 0:
             condition = res.register(self.comp_expr())
-            if res.error: return res
+            if res.error: return None, res
 
-        statement = self.capture_node(res, self.statements)
+        statement, error = self.capture_node(res, self.statements)
+        if error:
+            return None, error
+
         return (condition, statement), None
 
     def capture_node(self, res, fun):
         if self.curent_tok.type != TT_LFPAREN:
-            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
+            return None, res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                   self.curent_tok.pos_end,
                                                   "Expected '{'"))
         res.register_advance()
         self.advance()
         statement = res.register(fun())
-        if res.error: return res
+        if res.error: return None, res
         if self.curent_tok.type != TT_RFPAREN:
-            return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
+            return None, res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                   self.curent_tok.pos_end,
                                                   "Expected '}'"))
         res.register_advance()
         self.advance()
-        return statement
+        return statement, None
 
 
 class RTResult:
