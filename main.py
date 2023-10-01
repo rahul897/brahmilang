@@ -112,7 +112,7 @@ class RTError(Error):
             pos = ctx.parent_entry_pos
             ctx = ctx.parent
 
-        return 'Traceback (most recent call last)\n' + result
+        return result
 
 
 class Position:
