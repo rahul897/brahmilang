@@ -108,7 +108,7 @@ class RTError(Error):
         pos = self.pos_start
         ctx = self.context
         while ctx:
-            result += f' File {pos.fn}, line {str(pos.ln + 1)}, in {ctx.display_name}\n'
+            result += f'File {pos.fn}, line {str(pos.ln + 1)}, in {ctx.display_name}\n'
             pos = ctx.parent_entry_pos
             ctx = ctx.parent
 
@@ -314,7 +314,7 @@ class Lexer:
         while self.current_char == '=':
             self.advance()
             return Token(TT_NE, pos_start=pos_start, pos_end=self.pos), None
-        return None, ExpectedCharError(pos_start, self.pos, "= after !")
+        return None, ExpectedCharError(pos_start, self.pos, "bro, ! tarvata = undali ")
 
     def make_less_than(self):
         pos_start = self.pos.copy()
@@ -507,7 +507,7 @@ class Parser:
         res = self.start()
         if not res.error and self.curent_tok.type != TT_EOF:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected +,-,*,/"))
+                                                  "ee line lo dobbindi choosko"))
         return res
 
     def advance(self):
@@ -562,7 +562,7 @@ class Parser:
                 arg_nodes.append(res.register(self.comp_expr()))
                 if res.error:
                     return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                          "Expected int,float,ipudu,identifier,-,+ or (, not,)"))
+                                                          "int,float,ipudu,identifier,-,+ or (, not,) \n veetilo edokati undali"))
                 while self.curent_tok.type == TT_COMMA:
                     res.register_advance()
                     self.advance()
@@ -572,7 +572,7 @@ class Parser:
 
                 if self.curent_tok.type != TT_RPAREN:
                     return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                          "Expected , or )"))
+                                                          "bro, closing ) undali kada"))
                 res.register_advance()
                 self.advance()
             return res.success(CallNode(atom, arg_nodes))
@@ -612,7 +612,7 @@ class Parser:
             else:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                       self.curent_tok.pos_end,
-                                                      "Expected ')'"))
+                                                      "bro, closing ) undali kada"))
         elif tok.matches(TT_KEYWORD, 'idi ok antaventra'):
             expr = res.register(self.if_expr())
             if res.error: return res
@@ -627,7 +627,7 @@ class Parser:
             return res.success(expr)
 
         return res.failure(InvalidSyntaxError(tok.pos_start, tok.pos_end,
-                                              "Expected int, float,identifier,-,+ or ("))
+                                              "ee line lo dobbindi choosko"))
 
     def factor(self):
         res = ParseResult()
@@ -658,7 +658,7 @@ class Parser:
         node = res.register(self.bin_op(self.arith_expr, (TT_GTE, TT_GT, TT_LT, TT_LTE, TT_EE, TT_NE)))
         if res.error:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected int,float,ipudu,identifier,-,+ or (, not"))
+                                                  "int,float,ipudu,identifier,-,+, !, ( veetilo edokati undali"))
         return res.success(node)
 
     def start(self):
@@ -756,7 +756,7 @@ class Parser:
             node = res.register(self.bin_op(self.comp_expr, ((TT_KEYWORD, 'inka'), (TT_KEYWORD, 'kani'))))
             if res.error:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected int,float,ipudu,identifier,-,+ or ("))
+                                                      "ee line lo dobbindi choosko"))
             return res.success(node)
 
         if self.curent_tok.matches(TT_KEYWORD, 'ipudu'):
@@ -766,13 +766,13 @@ class Parser:
 
             if self.curent_tok.type != TT_IDENTIFIER:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected identifier"))
+                                                      "ee line lo dobbindi choosko"))
             var_name = self.curent_tok
             res.register_advance()
             self.advance()
             if self.curent_tok.type != TT_EQ:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected ="))
+                                                      "= undali ikkada"))
             res.register_advance()
             self.advance()
             expr = res.register(self.comp_expr())
@@ -780,7 +780,7 @@ class Parser:
             return res.success(VarAssignNode(var_name, expr, define))
         else:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected identifier"))
+                                                  "ee line lo dobbindi choosko"))
 
     def while_expr(self):
         res = ParseResult()
@@ -800,10 +800,10 @@ class Parser:
             self.advance()
             if self.curent_tok.type != TT_LPAREN:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected ("))
+                                                      "opening ( to start cheyali"))
         if self.curent_tok.type != TT_LPAREN:
             return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                  "Expected ( or identifier"))
+                                                  "edoka value kada undali"))
         res.register_advance()
         self.advance()
         arg_name_toks = []
@@ -817,18 +817,18 @@ class Parser:
                 self.advance()
                 if self.curent_tok.type != TT_IDENTIFIER:
                     return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                          "Expected identifier"))
+                                                          "edoka value kada undali"))
                 arg_name_toks.append(self.curent_tok)
                 res.register_advance()
                 self.advance()
 
             if self.curent_tok.type != TT_RPAREN:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected , or )"))
+                                                      "closing ) bracket evadistadu"))
         else:
             if self.curent_tok.type != TT_RPAREN:
                 return res.failure(InvalidSyntaxError(self.curent_tok.pos_start, self.curent_tok.pos_end,
-                                                      "Expected identifier or )"))
+                                                      "closing ) bracket evadistadu"))
         res.register_advance()
         self.advance()
 
@@ -880,7 +880,7 @@ class Parser:
         if self.curent_tok.type != TT_LFPAREN:
             return None, res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                   self.curent_tok.pos_end,
-                                                  "Expected '{'"))
+                                                  "opening { undali bro"))
         res.register_advance()
         self.advance()
         statement = res.register(fun())
@@ -888,7 +888,7 @@ class Parser:
         if self.curent_tok.type != TT_RFPAREN:
             return None, res.failure(InvalidSyntaxError(self.curent_tok.pos_start,
                                                   self.curent_tok.pos_end,
-                                                  "Expected '}'"))
+                                                  "closing } undali bro"))
         res.register_advance()
         self.advance()
         return statement, None
